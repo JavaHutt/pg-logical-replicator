@@ -33,13 +33,10 @@ type (
 )
 
 func ParseConfigs(b []byte) ([]Config, error) {
-	var configsWrapper struct {
-		Configs []Config `json:"configs"`
+	var configs []Config
+	if unmarshalErr := json.Unmarshal(b, &configs); unmarshalErr != nil {
+		return nil, unmarshalErr
 	}
 
-	if err := json.Unmarshal(b, &configsWrapper); err != nil {
-		return nil, err
-	}
-
-	return configsWrapper.Configs, nil
+	return configs, nil
 }

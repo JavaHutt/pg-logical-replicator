@@ -1,0 +1,19 @@
+[
+    {
+        "table": "new_transactions",
+        "subject": "new_trxs",
+        "key_column": {
+            "name": "guid",
+            "pg_type": "uuid"
+        },
+        "version": "updated_at",
+        "snapshotter": {
+            "enabled": true,
+            "id": "e3bcde5c-65eb-400c-8ba1-9ab93e1eb3ad",
+            "sorting_tuple": ["updated_at", "guid"]
+        },
+        "replicator": {
+            "enabled": true
+        }
+    }
+]

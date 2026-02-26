@@ -152,7 +152,7 @@ func (p *StdProcessor) write(ctx context.Context, values map[string]any) error {
 	msg.Key = key
 
 	if msg.Version, err = retrieveVersion(values, p.cfg.Version); err != nil {
-		return fmt.Errorf("failed to marshal version: %w", err)
+		return fmt.Errorf("failed to retrieve version: %w", err)
 	}
 
 	msg.Payload = values
