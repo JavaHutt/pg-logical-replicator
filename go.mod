@@ -10,6 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.49.0
+	github.com/oklog/run v1.2.0
 	go.uber.org/mock v0.6.0
 	go.uber.org/zap v1.27.1
 )

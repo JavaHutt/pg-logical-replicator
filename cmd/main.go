@@ -1,17 +1,23 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"pg-logical-replicator/internal/config"
+	"pg-logical-replicator/internal/replicator"
+	"pg-logical-replicator/internal/writer"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/oklog/run"
 	"go.uber.org/zap"
 )
 
@@ -118,8 +124,92 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	_ = configs
-	_ = js
+	ctx := context.Background()
+	var g run.Group
+
+	// replicators
+	for _, replCfg := range configs {
+		if !replCfg.Replicator.Enabled {
+			continue
+		}
+
+		replPG, err := openReplDB(ctx, cfg.DBUsername, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName, cfg.DBSSLMode, cfg.DBSchema)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		defer replPG.Close(ctx)
+
+		table := replCfg.Table
+		replLogger := logger.With("table", table)
+
+		processor := replicator.MustNewStdProcessor(replCfg, replLogger, writer.NewNATSWriter(js, replLogger, replCfg.Subject))
+		repl := replicator.New(
+			replCfg,
+			replLogger,
+			replPG,
+			replicator.WithProcessor(processor),
+			replicator.WithStandByTimeout(cfg.StandByTimeout),
+		)
+
+		g.Add(
+			func() error {
+				replLogger.Infof("replicator started")
+				err := repl.Run()
+				replLogger.Infof("replicator finished: %v", err)
+				return err
+			},
+			func(err error) {
+				repl.Shutdown()
+				replLogger.Infof("replicator shut down: %v", err)
+			},
+		)
+	}
+
+	if err := g.Run(); err != nil {
+		logger.Fatalf("run group: %v", err)
+	}
+}
+
+func openReplDB(ctx context.Context, user, password, host string, port int, dbName, sslMode, searchPath string) (*pgconn.PgConn, error) {
+	dsn := fmt.Sprintf("user=%s password=%s host=%s port=%d dbname=%s sslmode=%s search_path=%s replication=database",
+		user, password, host, port, dbName, sslMode, searchPath)
+
+	config, err := pgconn.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse replication pg config: %w", err)
+	}
+
+	conn, err := pgconn.ConnectConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to replication pg: %w", err)
+	}
+
+	if err = conn.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping replication pg: %w", err)
+	}
+
+	return conn, nil
+}
+
+func openDB(ctx context.Context, user, password, host string, port int, dbName, sslMode, searchPath string) (*pgx.Conn, error) {
+	dsn := fmt.Sprintf("user=%s password=%s host=%s port=%d dbname=%s sslmode=%s search_path=%s",
+		user, password, host, port, dbName, sslMode, searchPath)
+
+	config, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse replication pg config: %w", err)
+	}
+
+	conn, err := pgx.ConnectConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to replication pg: %w", err)
+	}
+
+	if err = conn.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping replication pg: %w", err)
+	}
+
+	return conn, nil
 }
 
 func natsConnect(addr, user, password string) (*nats.Conn, error) {
