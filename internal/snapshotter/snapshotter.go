@@ -81,7 +81,7 @@ func (s *Snapshotter) Run() error {
 				return nil
 			}
 
-			return fmt.Errorf("processor.Process(): %w", err)
+			return fmt.Errorf("snapshot processor failed: %w", err)
 		}
 		rows.Close()
 
@@ -111,7 +111,7 @@ func (s *Snapshotter) querySnapshotData(ctx context.Context, key string, version
 
 	rows, err := s.conn.Query(ctx, sql, s.startedAt, version, key)
 	if err != nil {
-		return nil, fmt.Errorf("conn.Query: %w", err)
+		return nil, fmt.Errorf("failed to query snapshot data: %w", err)
 	}
 
 	return rows, nil
@@ -142,7 +142,7 @@ func (s *Snapshotter) getSnapshotterFromDB(ctx context.Context, id uuid.UUID) (*
 	row := s.conn.QueryRow(ctx, getSnapshotterQuery, id)
 
 	if err := row.Scan(&sdb.ID, &sdb.StartedAt, &sdb.TableName, &sdb.Key, &sdb.Version, &sdb.IsDone); err != nil {
-		return nil, fmt.Errorf("get snapshotter row.Scan(): %w", err)
+		return nil, fmt.Errorf("failed to scan snapshotter row: %w", err)
 	}
 
 	return &sdb, nil
@@ -153,7 +153,7 @@ func (s *Snapshotter) createSnapshotterInDB(ctx context.Context, id uuid.UUID, t
 
 	_, err := s.conn.Exec(ctx, createSnapshotterQuery, id, table, now)
 	if err != nil {
-		return nil, fmt.Errorf("create snapshotter conn.Exec(): %w", err)
+		return nil, fmt.Errorf("failed to insert snapshotter row: %w", err)
 	}
 
 	return &SnapshotterDB{
@@ -164,7 +164,7 @@ func (s *Snapshotter) createSnapshotterInDB(ctx context.Context, id uuid.UUID, t
 
 func (s *Snapshotter) updateSnapshotterValuesInDB(ctx context.Context, id uuid.UUID, key string, version time.Time) error {
 	if _, err := s.conn.Exec(ctx, updateSnapshotterQuery, key, version, id); err != nil {
-		return fmt.Errorf("update snapshotter conn.Exec(): %w", err)
+		return fmt.Errorf("failed to update snapshotter row: %w", err)
 	}
 
 	return nil
@@ -172,7 +172,7 @@ func (s *Snapshotter) updateSnapshotterValuesInDB(ctx context.Context, id uuid.U
 
 func (s *Snapshotter) setSnapshotterDoneInDB(ctx context.Context, id uuid.UUID, key string, version time.Time) error {
 	if _, err := s.conn.Exec(ctx, updateSnapshotterDoneQuery, key, version, true, id); err != nil {
-		return fmt.Errorf("update snapshotter done conn.Exec(): %w", err)
+		return fmt.Errorf("failed to mark snapshotter done: %w", err)
 	}
 
 	return nil

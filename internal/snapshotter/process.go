@@ -39,7 +39,7 @@ func (p *StdProcessor) Process(ctx context.Context, rows pgx.Rows) (string, time
 		payload := make(map[string]any)
 
 		if err = rows.Scan(&key, &version, &payload); err != nil {
-			return "", time.Time{}, fmt.Errorf("rows.Scan(): %w", err)
+			return "", time.Time{}, fmt.Errorf("failed to scan snapshot row: %w", err)
 		}
 
 		data, err := prepareData(key, version, payload)
@@ -54,7 +54,7 @@ func (p *StdProcessor) Process(ctx context.Context, rows pgx.Rows) (string, time
 		count++
 	}
 	if rows.Err() != nil {
-		return "", time.Time{}, fmt.Errorf("rows.Err(): %w", rows.Err())
+		return "", time.Time{}, fmt.Errorf("snapshot rows iteration failed: %w", rows.Err())
 	}
 
 	p.log.Infof("%d rows sent to writer", count)
