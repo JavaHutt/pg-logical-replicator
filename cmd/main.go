@@ -9,6 +9,7 @@ import (
 
 	"pg-logical-replicator/internal/config"
 	"pg-logical-replicator/internal/replicator"
+	"pg-logical-replicator/internal/snapshotter"
 	"pg-logical-replicator/internal/writer"
 
 	"github.com/caarlos0/env/v11"
@@ -126,6 +127,38 @@ func main() {
 
 	ctx := context.Background()
 	var g run.Group
+
+	// snapshotters
+	for _, snapCfg := range configs {
+		if !snapCfg.Snapshotter.Enabled {
+			continue
+		}
+
+		pg, err := openDB(ctx, cfg.DBUsername, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName, cfg.DBSSLMode, cfg.DBSchema)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		defer pg.Close(ctx)
+
+		table := snapCfg.Table
+		snapLogger := logger.With("table", table)
+
+		processor := snapshotter.NewStdProcessor(snapCfg, snapLogger, writer.NewNATSWriter(js, snapLogger, snapCfg.Subject), cfg.BatchSize)
+		snap := snapshotter.New(snapCfg, snapLogger, pg, table, cfg.BatchSize, snapshotter.WithProcessor(processor))
+
+		g.Add(
+			func() error {
+				snapLogger.Infof("snapshotter started")
+				err := snap.Run()
+				snapLogger.Infof("snapshotter finished: %v", err)
+				return err
+			},
+			func(err error) {
+				snap.Shutdown()
+				snapLogger.Infof("snapshotter shut down: %v", err)
+			},
+		)
+	}
 
 	// replicators
 	for _, replCfg := range configs {
